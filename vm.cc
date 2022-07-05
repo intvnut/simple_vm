@@ -359,20 +359,20 @@ void VM::Prescan() {
   std::fill(recent_local.begin(), recent_local.end(), kTerminatePc);
   ByteType prevbyte = kTerminateByte;
   LocType last_non_whitespace = kTerminatePc;
-  LocType lns1 = kTerminatePc, lns2 = kTerminatePc;
+  LocType lnw1 = kTerminatePc, lnw2 = kTerminatePc;
   for (LocType loc = prog_.size(); loc > 0;) {
     const LocType lloc = loc;
     const ByteType bytecode = ByteAt(--loc);
 
     if (bytecode != ' ') {
-      lns2 = lns1;
-      lns1 = last_non_whitespace;
+      lnw2 = lnw1;
+      lnw1 = last_non_whitespace;
       last_non_whitespace = loc;
     }
 
     switch (bytecode) {
       case 'L': {
-        branch_target_[lloc] = lns2;
+        branch_target_[lloc] = lnw2;
         recent_local[prevbyte] = loc + 2;
         break;
       }

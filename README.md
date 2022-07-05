@@ -13,9 +13,9 @@ The file `vm.cc` is the same virtual machine, reformatted for displays wider
 than a cash register receipt and cleaned up overall, with a couple additional
 bytecodes and features added.  These are noted in the description below.
 
-## Machine Model
+# Machine Model
 
-### Data Stack and Registers
+## Data Stack and Registers
 
 The VM implements a stack machine with an arbitrarily deep data stack.  The
 stack behaves as if there is an infinite series of zeros beneath it, so it's
@@ -34,13 +34,13 @@ the stack into registers, or push copies of register contents onto the stack.
 That's it.  Registers can be a convenient place to store regularly used
 constants.
 
-### Values
+## Values
 
 In the original VM, all values are double precision IEEE 754 floating point
 values.  In the updated VM, I plan to allow strings by using NaN-boxed
 references to a string table.
 
-### Machine State
+## Machine State
 
 The VM carries some additional state to track its execution:
 
@@ -51,7 +51,7 @@ The VM carries some additional state to track its execution:
   power-of-10 to apply to a fraction digit, or the current exponent value for an
   exponent under construction.
 
-### Argument Order
+## Argument Order
 
 For bytecodes that extract multiple arguments from the stack, the right-most
 argument is at the top of stack, and the left-most is furthest down in the
@@ -60,9 +60,9 @@ stack.  This is consistent to pushing arguments left to right.
 For binary arithmetic operators, that means the right-hand argument is on top
 of stack, and the left-hand argument is just beneath it.
 
-## Bytecode Reference
+# VM Bytecode Reference
 
-### Conventions
+## Conventions
 
 The term TOS refers to the value on the top of stack, and NOS refers to the
 next value on the stack below it ("next on stack").
@@ -116,7 +116,7 @@ consider the construct `D ? 42 L: 17 + : 23 - ;`.  The _then_ clause will
 execute `42 17 +`, while the _else_ clause might execute `17 + 23 -`.  Oops.
 
 
-### Pseudo-code Functions
+## Pseudo-code Functions
 
 The bytecode definitions use the following pseudo-code functions:
 
@@ -138,7 +138,7 @@ The bytecode definitions use the following pseudo-code functions:
 | `SetV(v,x)` | Sets the value of variable _v_ to `x`. |
 | `Repeat(n):` | Repeats the following statement `n` times. |
 
-### Summary
+## Bytecode Definitions
 
 | Bytecode | Description | New? |
 | :--: | :-- | :--: |
@@ -151,7 +151,7 @@ The bytecode definitions use the following pseudo-code functions:
 | `~` | `TOS = Pop(); Push(-TOS);`  | n |
 | `%` | `TOS = Pop(); NOS = Pop(); Push(FMod(NOS, TOS));` | YES |
 | `&` | `TOS = Pop(); NOS = Pop(); Push(Uint(NOS) & Uint(TOS));` | YES |
-| `\|` | `TOS = Pop(); NOS = Pop(); Push(Uint(NOS) | Uint(TOS));` | YES |
+| `\|` | `TOS = Pop(); NOS = Pop(); Push(Uint(NOS) \| Uint(TOS));` | YES |
 | `^` | `TOS = Pop(); NOS = Pop(); Push(Uint(NOS) ^ Uint(TOS));` | YES |
 | `<` | `TOS = Pop(); NOS = Pop(); Push(NOS * Pow(2, TOS));` | YES |
 | `>` | `TOS = Pop(); NOS = Pop(); Push(NOS / Pow(2, TOS));` | YES |
@@ -178,9 +178,10 @@ The bytecode definitions use the following pseudo-code functions:
 | `X` | Terminates execution. | n |
 | _whitespace_ | NOP. Also terminates the numeric entry state machine. | n |
 
-## Control flow
 
-### Unconditional local branches
+# Control flow
+
+## Unconditional local branches
 
 The `L` bytecode defines a local label.  In the original interpreter, this was
 constrained to the same set of names associated with variables: `a` through `z`.
@@ -196,7 +197,7 @@ of a particular label.
 Nothing stops you from using these for farther-reaching branches; however, the
 limited set of label names makes that tricky.
 
-### If-Then-Else
+## If-Then-Else
 
 The `?`, `:`, and `;` bytecodes form the an *if-then-else* sequence.  The `?`
 determines whether to take the *then* or *else* branch based on the sign of
@@ -229,7 +230,7 @@ as the following has well defined behavior:
 This will print 17 followed by 42, and then terminate.  Branching into the
 middle of or out of an *if-then-else* is perfectly fine.
 
-### Loops
+## Loops
 
 The bytecode does not offer an explicit looping construct.  Rather, use an
 *if-then* or *if-then-else* coupled with local branch.
@@ -247,9 +248,9 @@ Note: in the original VM, you need to write:
 9 La 42'P 1- D? Ba :;
 ```
 
-### Unconditional long branches and calls _(New)_
+## Unconditional long branches and calls _(New)_
 
-#### Destinations
+### Destinations
 
 Destinations fall into two categories:  Global labels and absolute program
 addresses.
@@ -269,7 +270,7 @@ This specification recommends avoiding 0, so that there's no possibility of
 strange effects around signed zero.  That also leaves the value 0 available to
 signal a null function pointer, for example.
 
-#### Global Labels
+### Global Labels
 
 The `@` bytecode defines an global label.  The global label follows the opcode.
 Never comes from the stack.  The label is fixed in the bytecode.

@@ -331,6 +331,7 @@ void VM::Prescan() {
       case '@': {
         auto [val, new_loc] = GetNumber(loc);
         global_label_[val] = new_loc;
+        branch_target_[loc] = new_loc;
         // In the unlikely event someone jumps into the middle of a global label
         // definition, GetNumber will do the right thing.  For now, optimize
         // for the more likely case.
@@ -420,7 +421,6 @@ void VM::Step() {
     case '>': { auto rhs = Pop(); Top() /= pow(2.0, rhs); break; }
     case '\'': { PrintLn(Top()); break; }
     case '!': { PrintLn(GetV(NextByte())); break; }
-    case '@': { auto [val, loc] = GetNumber(pc_); pc_ = loc; break; }
     case 'C': { auto dst = Resolve(Pop()); Push(~pc_); pc_ = dst; break; }
     case 'G': { pc_ = Resolve(Pop()); break; }
     case 'I': { Top() = Int(Top()); break; }
@@ -433,9 +433,11 @@ void VM::Step() {
     case 'R': { Rotate(Nat(Pop())); break; }
     case 'S': { auto a = Pop(), b = Pop(); Push(a); Push(b); break; }
     case '?': { if (Pop() < 0) { pc_ = branch_target_[pc_]; } break; }
-    case ':': case 'B': case 'F': { pc_ = branch_target_[pc_]; break; }
     case ';': { break; }
     case 'L': { pc_++; break; }
+    case '@': case ':': case 'B': case 'F': {
+      pc_ = branch_target_[pc_]; break;
+    }
   }
 }
 

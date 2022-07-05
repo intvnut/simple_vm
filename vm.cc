@@ -3,6 +3,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -204,6 +205,29 @@ class VM {
   // Flatten whitespace down to ' '.
   static ByteType FixWs(ByteType bc) {
     return std::isspace(bc) ? ' ' : bc;
+  }
+
+  using DblFxn1 = double(double);
+  using DblFxn2 = double(double, double);
+
+  // Helper template for one-operand bytecodes.
+  template <typename Callable>
+  void OneOp(Callable fxn) {
+    Top() = fxn(Top());
+  }
+
+  // Helper template for two-operand bytecodes.
+  template <typename Callable>
+  void TwoOp(Callable fxn) {
+    auto rhs = Pop();
+    Top() = fxn(Top(), rhs);
+  }
+
+  // Helper template for two-operand bytecodes.
+  template <typename Callable>
+  void TwoOpUint(Callable fxn) {
+    auto rhs = Pop();
+    Top() = fxn(Uint(Top()), Uint(rhs));
   }
 
   std::pair<ValueType, LocType> GetNumber(LocType loc);
@@ -438,9 +462,9 @@ void VM::Prescan() {
 }
 
 void VM::Step() {
-  ByteType bytecode = FixWs(NextByte());
+  int bytecode = FixWs(NextByte());
   // Floating point escape bytecodes.
-  auto Esc = [](ByteType b) { return b + UCHAR_MAX + 1; };
+  auto Esc = [](ByteType b) { return b + kByteMax + 1; };
 
   if (bytecode == '\\') {
     bytecode = Esc(NextByte());
@@ -468,15 +492,15 @@ void VM::Step() {
       break;
     }
 
-    case '+': { auto rhs = Pop(); Top() += rhs; break; }
-    case '-': { auto rhs = Pop(); Top() -= rhs; break; }
-    case '*': { auto rhs = Pop(); Top() *= rhs; break; }
-    case '/': { auto rhs = Pop(); Top() /= rhs; break; }
-    case '~': { Top() = -Top(); break; }
-    case '%': { auto rhs = Pop(); Top() = std::fmod(Top(), rhs); break; }
-    case '&': { auto rhs = Pop(); Top() = Uint(Top()) & Uint(rhs); break; }
-    case '|': { auto rhs = Pop(); Top() = Uint(Top()) | Uint(rhs); break; }
-    case '^': { auto rhs = Pop(); Top() = Uint(Top()) ^ Uint(rhs); break; }
+    case '+': { TwoOp(std::plus()); break; }
+    case '-': { TwoOp(std::minus()); break; }
+    case '*': { TwoOp(std::multiplies()); break; }
+    case '/': { TwoOp(std::divides()); break; }
+    case '~': { OneOp(std::negate()); break; }
+    case '%': { TwoOp<DblFxn2>(std::fmod); break; }
+    case '&': { TwoOpUint(std::bit_and()); break; }
+    case '|': { TwoOpUint(std::bit_or()); break; }
+    case '^': { TwoOpUint(std::bit_xor()); break; }
     case '<': { auto rhs = Pop(); Top() *= std::exp2(rhs); break; }
     case '>': { auto rhs = Pop(); Top() /= std::exp2(rhs); break; }
     case '\'': { PrintLn(Top()); break; }
@@ -499,55 +523,59 @@ void VM::Step() {
     }
 
     // Library escapes.
-    case Esc('^'): { auto rhs = Pop(); Top() = std::pow(Top(), rhs); break; }
-    case Esc('h'): { auto rhs = Pop(); Top() = std::hypot(Top(), rhs); break; }
+    case Esc('^'): { TwoOp<DblFxn2>(std::pow); break; }
+    case Esc('h'): { TwoOp<DblFxn2>(std::hypot); break; }
     case Esc('H'): {
       auto x = Pop(), y = Pop();
       Top() = std::hypot(Top(), y, x);
       break;
     }
-    case Esc('a'): { auto rhs = Pop(); Top() = std::atan2(Top(), rhs); break; }
-    case Esc('s'): { Top() = std::sin(Top()); break; }
-    case Esc('S'): { Top() = std::asin(Top()); break; }
-    case Esc('c'): { Top() = std::cos(Top()); break; }
-    case Esc('C'): { Top() = std::acos(Top()); break; }
-    case Esc('t'): { Top() = std::tan(Top()); break; }
-    case Esc('T'): { Top() = std::atan(Top()); break; }
-    case Esc('x'): { Top() = std::sinh(Top()); break; }
-    case Esc('X'): { Top() = std::asinh(Top()); break; }
-    case Esc('y'): { Top() = std::cosh(Top()); break; }
-    case Esc('Y'): { Top() = std::acosh(Top()); break; }
-    case Esc('z'): { Top() = std::tanh(Top()); break; }
-    case Esc('Z'): { Top() = std::atanh(Top()); break; }
-    case Esc('v'): { Top() = std::erf(Top()); break; }
-    case Esc('V'): { Top() = std::erfc(Top()); break; }
-    case Esc('u'): { Top() = std::tgamma(Top()); break; }
-    case Esc('U'): { Top() = std::lgamma(Top()); break; }
-    case Esc('e'): { Top() = std::exp(Top()); break; }
-    case Esc('l'): { Top() = std::log(Top()); break; }
-    case Esc('2'): { Top() = std::log2(Top()); break; }
-    case Esc('q'): { Top() = std::sqrt(Top()); break; }
-    case Esc('3'): { Top() = std::cbrt(Top()); break; }
-    case Esc('>'): { Top() = std::ceil(Top()); break; }
-    case Esc('<'): { Top() = std::floor(Top()); break; }
-    case Esc('_'): { Top() = std::trunc(Top()); break; }
-    case Esc('|'): { Top() = std::abs(Top()); break; }
-    case Esc('i'): { Top() = std::round(Top()); break; }
-    case Esc('I'): { Top() = std::nearbyint(Top()); break; }
+    case Esc('a'): { TwoOp<DblFxn2>(std::atan2); break; }
+    case Esc('s'): { OneOp<DblFxn1>(std::sin); break; }
+    case Esc('S'): { OneOp<DblFxn1>(std::asin); break; }
+    case Esc('c'): { OneOp<DblFxn1>(std::cos); break; }
+    case Esc('C'): { OneOp<DblFxn1>(std::acos); break; }
+    case Esc('t'): { OneOp<DblFxn1>(std::tan); break; }
+    case Esc('T'): { OneOp<DblFxn1>(std::atan); break; }
+    case Esc('x'): { OneOp<DblFxn1>(std::sinh); break; }
+    case Esc('X'): { OneOp<DblFxn1>(std::asinh); break; }
+    case Esc('y'): { OneOp<DblFxn1>(std::cosh); break; }
+    case Esc('Y'): { OneOp<DblFxn1>(std::acosh); break; }
+    case Esc('z'): { OneOp<DblFxn1>(std::tanh); break; }
+    case Esc('Z'): { OneOp<DblFxn1>(std::atanh); break; }
+    case Esc('v'): { OneOp<DblFxn1>(std::erf); break; }
+    case Esc('V'): { OneOp<DblFxn1>(std::erfc); break; }
+    case Esc('u'): { OneOp<DblFxn1>(std::tgamma); break; }
+    case Esc('U'): { OneOp<DblFxn1>(std::lgamma); break; }
+    case Esc('e'): { OneOp<DblFxn1>(std::exp); break; }
+    case Esc('l'): { OneOp<DblFxn1>(std::log); break; }
+    case Esc('2'): { OneOp<DblFxn1>(std::log2); break; }
+    case Esc('q'): { OneOp<DblFxn1>(std::sqrt); break; }
+    case Esc('3'): { OneOp<DblFxn1>(std::cbrt); break; }
+    case Esc('>'): { OneOp<DblFxn1>(std::ceil); break; }
+    case Esc('<'): { OneOp<DblFxn1>(std::floor); break; }
+    case Esc('_'): { OneOp<DblFxn1>(std::trunc); break; }
+    case Esc('|'): { OneOp<DblFxn1>(std::abs); break; }
+    case Esc('i'): { OneOp<DblFxn1>(std::round); break; }
+    case Esc('I'): { OneOp<DblFxn1>(std::nearbyint); break; }
     case Esc('f'): {
       int exp;
       Top() = std::frexp(Top(), &exp);
       Push(exp);
       break;
     }
-    case Esc('F'): { auto rhs = Pop(); Top() = std::ldexp(Top(), rhs); break; }
+    case Esc('F'): {
+      auto rhs = Pop();
+      Top() = std::ldexp(Top(), rhs);
+      break;
+    }
     case Esc('m'): {
       double int_part;
       Top() = std::modf(Top(), &int_part);
       Push(int_part);
       break;
     }
-    case Esc('-'): { Top() = std::signbit(Top()); break; }
+    case Esc('-'): { OneOp<bool(double)>(std::signbit); break; }
     case Esc('+'): {
       auto rhs = Pop();
       Top() = std::copysign(Top(), rhs);

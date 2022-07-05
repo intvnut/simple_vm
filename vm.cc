@@ -301,6 +301,8 @@ VM::ValueLocPair VM::GetNumber(VM::LocType loc) {
 // Crossing a '?' sets the branch target to '?' for the first byte after the
 // most recent ':' at this depth.
 //
+// Branches to unconditional branches can be resolved down to a single branch.
+//
 // Note:  Global branches can't be resolved since they draw their argument from
 // the stack.  Predecoding literals gets us most of that anyway.
 //
@@ -394,6 +396,21 @@ void VM::Prescan() {
     }
 
     prevbyte = bytecode;
+  }
+
+  // Branch-to-branch pass.
+  for (LocType loc = 0; loc != prog_.size();) {
+    ByteType bytecode = ByteAt(loc++);
+    LocType branch_target_loc = branch_target_[loc];
+
+    if (branch_target_loc != kTerminatePc) {
+      ByteType target_byte = ByteAt(branch_target_loc);
+
+      if (target_byte == 'F' || target_byte == 'B' || target_byte == '@' ||
+          target_byte == ':' || target_byte == ' ') {
+        branch_target_[loc] = branch_target_[branch_target_loc + 1];
+      }
+    }
   }
 }
 

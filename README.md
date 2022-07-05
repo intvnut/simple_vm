@@ -62,7 +62,13 @@ of stack, and the left-hand argument is just beneath it.
 
 # VM Bytecode Reference
 
-## Conventions
+With exception to the floating point math library, bytecodes are a single byte
+long.  The floating point math library is large enough that it uses a `\\`
+prefix byte followed by a second byte to specify the library entry.
+
+Currently, all of the bytecodes consist of printable characters and whitespace.
+
+## Documentation Conventions
 
 The term TOS refers to the value on the top of stack, and NOS refers to the
 next value on the stack below it ("next on stack").
@@ -140,6 +146,12 @@ The bytecode definitions use the following pseudo-code functions:
 
 ## Bytecode Definitions
 
+Bytecodes not defined in the tables below have implementation defined behavior.
+The original VM treats them as NOPs.  The new VM treats them as errors and
+terminates the program.
+
+### Primary Bytecodes
+
 | Bytecode | Description | New? |
 | :--: | :-- | :--: |
 | `a` through `z` | `Push(GetV(v));`  These bytecodes are shortcuts to push the corresponding variables on the stack. The variable _v_ is the bytecode itself. | n |
@@ -155,6 +167,7 @@ The bytecode definitions use the following pseudo-code functions:
 | `^` | `TOS = Pop(); NOS = Pop(); Push(Uint(NOS) ^ Uint(TOS));` | YES |
 | `<` | `TOS = Pop(); NOS = Pop(); Push(NOS * Pow(2, TOS));` | YES |
 | `>` | `TOS = Pop(); NOS = Pop(); Push(NOS / Pow(2, TOS));` | YES |
+| `\\` | Math library escape. See table below. | YES |
 | `'` | `PrintLn(Top())`. Displays value of TOS on line by itself. | n |
 | `!` _v_ | `PrintLn(GetV(v));` Displays the value of variable _v_ on a line by itself. | n |
 | `@` _g_ | Defines the global label _g._  | YES |
@@ -178,9 +191,50 @@ The bytecode definitions use the following pseudo-code functions:
 | `X` | Terminates execution. | n |
 | _whitespace_ | NOP. Also terminates the numeric entry state machine. | n |
 
-Bytecodes not defined in the table above have implementation defined behavior.
-The original VM treats them as NOPs.  The new VM treats them as errors and
-terminates the program.
+### Library Escape Bytecodes
+
+These are preceded by the `\\` escape prefix bytecode.  None of these is in
+the original VM.
+
+| Bytecode | Description |
+| :--: | :-- |
+| `^` | `TOS = Pop(); NOS = Pop(); Push(pow(NOS, TOS));` |
+| `h` | `TOS = Pop(); NOS = Pop(); Push(hypot(NOS, TOS));` 2-D Euclidean distance. |
+| `H` | `TOS = Pop(); NOS = Pop(); Push(hypot(Pop(), NOS, TOS));` 3-D Euclidean distance. |
+| `a` | `TOS = Pop(); NOS = Pop(); Push(atan2(NOS, TOS));` |
+| `s` | `Push(sin(Pop()));` |
+| `S` | `Push(asin(Pop()));` |
+| `c` | `Push(cos(Pop()));` |
+| `C` | `Push(acos(Pop()));` |
+| `t` | `Push(tan(Pop()));` |
+| `T` | `Push(atan(Pop()));` See also `a` above for `atan2`. |
+| `x` | `Push(sinh(Pop()));` |
+| `X` | `Push(asinh(Pop()));` |
+| `y` | `Push(cosh(Pop()));` |
+| `Y` | `Push(acosh(Pop()));` |
+| `z` | `Push(tanh(Pop()));` |
+| `Z` | `Push(atanh(Pop()));` |
+| `v` | `Push(erf(Pop()));` Error function. |
+| `V` | `Push(erfc(Pop()));` Error function complement. |
+| `u` | `Push(tgamma(Pop()));` Gamma function. |
+| `U` | `Push(lgamma(Pop()));` Natural log of the gamma function. |
+| `e` | `Push(exp(Pop()));` |
+| `l` | `Push(log(Pop()));` Natural logarithm. |
+| `2` | `Push(log2(Pop()));` Base-2 logarithm.  `1S<` gives the inverse. |
+| `q` | `Push(sqrt(Pop()));` |
+| `3` | `Push(cbrt(Pop()));` Cube root. |
+| `>` | `Push(ceil(Pop()));` Nearest integer not less than TOS. |
+| `<` | `Push(floor(Pop()));` Nearest integer not greater than TOS. |
+| `_` | `Push(trunc(Pop()));` Nearest integer not greater in magnitude than TOS. |
+| `\|` | `Push(abs(Pop()));` Absolute value. |
+| `i` | `Push(round(Pop()));` Nearest integer, rounding away from 0 in halfway cases. |
+| `I` | `Push(nearbyint(Pop()));` Nearest integer, in current rounding mode (round to even). |
+| `f` | `Push(frexp(Pop(), &exp)); Push(exp);` Decompose number into fraction and exponent |
+| `F` | `TOS = Pop(); NOS = Pop(); Push(ldexp(NOS, Int(TOS)));` Multiples NOS by 2^TOS.  Inverse of `f` bytecode. |
+| `m` | `Push(modf(Pop(), &int_part)); Push(int_part);` Separates TOS into fractional and integer parts, each with the same sign as the original. |
+| `-` | `Push(signbit(Pop()));`  Pushes 1 if the number is negative, 0 otherwise. |
+| `+` | `TOS = Pop(); NOS = Pop(); Push(copysign(NOS, TOS));` Copies the sign of TOS onto NOS.  |
+
 
 # Control flow
 

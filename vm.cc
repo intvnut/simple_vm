@@ -201,6 +201,11 @@ class VM {
     std::cout << val;
   }
 
+  // Flatten whitespace down to ' '.
+  static ByteType FixWs(ByteType bc) {
+    return std::isspace(bc) ? ' ' : bc;
+  }
+
   std::pair<ValueType, LocType> GetNumber(LocType loc);
   void Prescan();
 };
@@ -267,7 +272,7 @@ VM::ValueLocPair VM::GetNumber(VM::LocType loc) {
             continue;
           }
           case kNsExponent: {
-            val *= std::pow(10, int(p));
+            val *= std::pow(10., int(p));
             done = true;
             continue;
           }
@@ -285,6 +290,7 @@ VM::ValueLocPair VM::GetNumber(VM::LocType loc) {
   predec_values_[orig_loc] = val_loc;
   return val_loc;
 }
+
 
 // Prescans the program, establishing the location of all global and local
 // labels, and the values of all numbers.  This allows for fast lookup
@@ -323,13 +329,7 @@ void VM::Prescan() {
   std::array<LocType, kByteMax + 1> recent_local{};
   std::fill(recent_local.begin(), recent_local.end(), kTerminatePc);
   for (LocType loc = 0; loc != prog_.size();) {
-    ByteType bytecode = ByteAt(loc++);
-
-    // Force all whitespace to be exactly ' '. 
-    if (std::isspace(bytecode)) {
-      prog_[loc - 1] = ' ';
-      bytecode = ' ';
-    }
+    const ByteType bytecode = FixWs(ByteAt(loc++));
 
     switch (bytecode) {
       case 'L': { recent_local[ByteAt(loc)] = loc + 1; break; }
@@ -361,8 +361,10 @@ void VM::Prescan() {
   LocType last_non_whitespace = kTerminatePc;
   LocType lnw1 = kTerminatePc, lnw2 = kTerminatePc;
   for (LocType loc = prog_.size(); loc > 0;) {
+    // Force all whitespace to be exactly ' ' for switch-case. 
     const LocType lloc = loc;
-    const ByteType bytecode = ByteAt(--loc);
+    const ByteType currbyte = ByteAt(--loc);
+    const ByteType bytecode = FixWs(currbyte);
 
     if (bytecode != ' ') {
       lnw2 = lnw1;
@@ -403,20 +405,20 @@ void VM::Prescan() {
       }
     }
 
-    prevbyte = bytecode;
+    prevbyte = currbyte;  // Without whitespace remap in case of dodgy labels.
   }
 
   // Branch-to-branch pass.
   std::vector<LocType> branch_froms;
   for (LocType loc = 0; loc != prog_.size();) {
-    ByteType bytecode = ByteAt(loc++);
+    const ByteType bytecode = ByteAt(loc++);
     LocType branch_from_loc = loc;
     LocType branch_target_loc = branch_target_[loc];
 
     branch_froms.clear();
 
     while (branch_target_loc != kTerminatePc) {
-      ByteType target_byte = ByteAt(branch_target_loc);
+      ByteType target_byte = FixWs(ByteAt(branch_target_loc));
 
       branch_froms.push_back(branch_from_loc);
 
@@ -436,7 +438,13 @@ void VM::Prescan() {
 }
 
 void VM::Step() {
-  const ByteType bytecode = NextByte();
+  ByteType bytecode = FixWs(NextByte());
+  // Floating point escape bytecodes.
+  auto Esc = [](ByteType b) { return b + UCHAR_MAX + 1; };
+
+  if (bytecode == '\\') {
+    bytecode = Esc(NextByte());
+  }
 
   switch (bytecode) {
     case 'X': {
@@ -469,8 +477,8 @@ void VM::Step() {
     case '&': { auto rhs = Pop(); Top() = Uint(Top()) & Uint(rhs); break; }
     case '|': { auto rhs = Pop(); Top() = Uint(Top()) | Uint(rhs); break; }
     case '^': { auto rhs = Pop(); Top() = Uint(Top()) ^ Uint(rhs); break; }
-    case '<': { auto rhs = Pop(); Top() *= pow(2.0, rhs); break; }
-    case '>': { auto rhs = Pop(); Top() /= pow(2.0, rhs); break; }
+    case '<': { auto rhs = Pop(); Top() *= std::exp2(rhs); break; }
+    case '>': { auto rhs = Pop(); Top() /= std::exp2(rhs); break; }
     case '\'': { PrintLn(Top()); break; }
     case '!': { PrintLn(GetV(NextByte())); break; }
     case 'C': { auto dst = Resolve(Pop()); Push(~pc_); pc_ = dst; break; }
@@ -488,6 +496,62 @@ void VM::Step() {
     case ';': { break; }
     case 'L': case '@': case ':': case 'B': case 'F': case ' ': {
       pc_ = branch_target_[pc_]; break;
+    }
+
+    // Library escapes.
+    case Esc('^'): { auto rhs = Pop(); Top() = std::pow(Top(), rhs); break; }
+    case Esc('h'): { auto rhs = Pop(); Top() = std::hypot(Top(), rhs); break; }
+    case Esc('H'): {
+      auto x = Pop(), y = Pop();
+      Top() = std::hypot(Top(), y, x);
+      break;
+    }
+    case Esc('a'): { auto rhs = Pop(); Top() = std::atan2(Top(), rhs); break; }
+    case Esc('s'): { Top() = std::sin(Top()); break; }
+    case Esc('S'): { Top() = std::asin(Top()); break; }
+    case Esc('c'): { Top() = std::cos(Top()); break; }
+    case Esc('C'): { Top() = std::acos(Top()); break; }
+    case Esc('t'): { Top() = std::tan(Top()); break; }
+    case Esc('T'): { Top() = std::atan(Top()); break; }
+    case Esc('x'): { Top() = std::sinh(Top()); break; }
+    case Esc('X'): { Top() = std::asinh(Top()); break; }
+    case Esc('y'): { Top() = std::cosh(Top()); break; }
+    case Esc('Y'): { Top() = std::acosh(Top()); break; }
+    case Esc('z'): { Top() = std::tanh(Top()); break; }
+    case Esc('Z'): { Top() = std::atanh(Top()); break; }
+    case Esc('v'): { Top() = std::erf(Top()); break; }
+    case Esc('V'): { Top() = std::erfc(Top()); break; }
+    case Esc('u'): { Top() = std::tgamma(Top()); break; }
+    case Esc('U'): { Top() = std::lgamma(Top()); break; }
+    case Esc('e'): { Top() = std::exp(Top()); break; }
+    case Esc('l'): { Top() = std::log(Top()); break; }
+    case Esc('2'): { Top() = std::log2(Top()); break; }
+    case Esc('q'): { Top() = std::sqrt(Top()); break; }
+    case Esc('3'): { Top() = std::cbrt(Top()); break; }
+    case Esc('>'): { Top() = std::ceil(Top()); break; }
+    case Esc('<'): { Top() = std::floor(Top()); break; }
+    case Esc('_'): { Top() = std::trunc(Top()); break; }
+    case Esc('|'): { Top() = std::abs(Top()); break; }
+    case Esc('i'): { Top() = std::round(Top()); break; }
+    case Esc('I'): { Top() = std::nearbyint(Top()); break; }
+    case Esc('f'): {
+      int exp;
+      Top() = std::frexp(Top(), &exp);
+      Push(exp);
+      break;
+    }
+    case Esc('F'): { auto rhs = Pop(); Top() = std::ldexp(Top(), rhs); break; }
+    case Esc('m'): {
+      double int_part;
+      Top() = std::modf(Top(), &int_part);
+      Push(int_part);
+      break;
+    }
+    case Esc('-'): { Top() = std::signbit(Top()); break; }
+    case Esc('+'): {
+      auto rhs = Pop();
+      Top() = std::copysign(Top(), rhs);
+      break;
     }
 
     default: {

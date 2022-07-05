@@ -358,16 +358,23 @@ void VM::Prescan() {
   std::fill(recent_local.begin(), recent_local.end(), kTerminatePc);
   ByteType prevbyte = kTerminateByte;
   LocType last_non_whitespace = kTerminatePc;
+  LocType lns1 = kTerminatePc, lns2 = kTerminatePc;
   for (LocType loc = prog_.size(); loc > 0;) {
     const LocType lloc = loc;
     const ByteType bytecode = ByteAt(--loc);
 
     if (bytecode != ' ') {
+      lns2 = lns1;
+      lns1 = last_non_whitespace;
       last_non_whitespace = loc;
     }
 
     switch (bytecode) {
-      case 'L': { recent_local[prevbyte] = loc + 2; break; }
+      case 'L': {
+        branch_target_[lloc] = lns2;
+        recent_local[prevbyte] = loc + 2;
+        break;
+      }
       case 'F': { branch_target_[lloc] = recent_local[prevbyte]; break; }
 
       case ';': {
@@ -412,8 +419,8 @@ void VM::Prescan() {
 
       branch_froms.push_back(branch_from_loc);
 
-      if (target_byte == 'F' || target_byte == 'B' || target_byte == '@' ||
-          target_byte == ':' || target_byte == ' ') {
+      if (target_byte == 'L' || target_byte == 'F' || target_byte == 'B' ||
+          target_byte == '@' || target_byte == ':' || target_byte == ' ') {
         branch_from_loc = branch_target_loc + 1;
         branch_target_loc = branch_target_[branch_from_loc];
       } else {
@@ -478,8 +485,7 @@ void VM::Step() {
     case 'S': { auto a = Pop(), b = Pop(); Push(a); Push(b); break; }
     case '?': { if (Pop() < 0) { pc_ = branch_target_[pc_]; } break; }
     case ';': { break; }
-    case 'L': { pc_++; break; }
-    case '@': case ':': case 'B': case 'F': case ' ': {
+    case 'L': case '@': case ':': case 'B': case 'F': case ' ': {
       pc_ = branch_target_[pc_]; break;
     }
   }

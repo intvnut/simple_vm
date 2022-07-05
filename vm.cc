@@ -228,10 +228,8 @@ VM::ValueLocPair VM::GetNumber(VM::LocType loc) {
     ByteType bytecode = ByteAt(loc++);
 
     switch (bytecode) {
-      case '0': case '1': case '2':
-      case '3': case '4': case '5':
-      case '6': case '7': case '8':
-      case '9': {
+      case '0': case '1': case '2': case '3': case '4':
+      case '5': case '6': case '7': case '8': case '9': {
         double digit_val = bytecode - '0';
 
         switch (num_state) {

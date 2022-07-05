@@ -178,7 +178,7 @@ class VM {
 
   // Rotates the top N elements of the stack by extracting the Nth element
   // from the top, sliding everything else down, and pushing the extracted
-  // element at the top.  0 levels the stack unmodified, while 1 swaps the
+  // element at the top.  0 leaves the stack unmodified, while 1 swaps the
   // top two elements.
   void Rotate(int64_t n) {
     if (n >= stack_.size()) {

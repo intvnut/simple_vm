@@ -21,9 +21,13 @@ The VM implements a stack machine with an arbitrarily deep data stack.  The
 stack behaves as if there is an infinite series of zeros beneath it, so it's
 impossible to underflow the stack.
 
-The VM also offers 26 registers, named `a` through `z`.  Each
+*Old:* The original VM also offers 26 registers, named `a` through `z`.  Each
 register holds a single value.  The bytecodes `a` through `z` push the
 corresponding register onto the stack.
+
+*New:* The current VM offers registers corresponding to each of the possible
+bytecode values; however, you should avoid some bytecode values for register
+IDs.  See the *Caution* under *Bytecode Reference :: Conventions.*
 
 The VM doesn't let you act directly on registers.  You can pop values from
 the stack into registers, or push copies of register contents onto the stack.

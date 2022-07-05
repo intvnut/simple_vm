@@ -296,12 +296,25 @@ VM::ValueLocPair VM::GetNumber(VM::LocType loc) {
 // most recent instance of each local label it sees during that pass, making
 // for O(1) lookup.
 //
-// Future possibility: resolve conditional branch targets.  Global branches
-// can't be resolved since they draw their argument from the stack.  Predecoding
-// literals gets us most of that anyway.
+// Conditional branches are resolved during the reverse pass.  Crossing a ';'
+// increments our nesting depth, and sets the ';' and ':' targets to the
+// location after the ';' for that depth.  Crossing a ':' sets the ':' for the
+// current depth, and sets the branch target for ':' to the ';' target.
+// Crossing a '?' sets the branch target to '?' for the first byte after the
+// most recent ':' at this depth.
+//
+// Note:  Global branches can't be resolved since they draw their argument from
+// the stack.  Predecoding literals gets us most of that anyway.
 //
 // This should only be called once, from the contructor.
 void VM::Prescan() {
+  struct ThenElse {
+    LocType after_then;
+    LocType after_else;
+  };
+  std::vector<ThenElse> then_else;
+  then_else.push_back({kTerminatePc, kTerminatePc});
+
   // Branch target array is indexed by PC after fetching the bytecode (PC+1).
   branch_target_.resize(prog_.length() + 1, kTerminatePc);
 
@@ -338,11 +351,31 @@ void VM::Prescan() {
   std::fill(recent_local.begin(), recent_local.end(), kTerminatePc);
   ByteType prevbyte = kTerminateByte;
   for (LocType loc = prog_.size(); loc > 0;) {
+    const LocType lloc = loc;
     const ByteType bytecode = ByteAt(--loc);
 
     switch (bytecode) {
       case 'L': { recent_local[prevbyte] = loc + 2; break; }
-      case 'F': { branch_target_[loc + 1] = recent_local[prevbyte]; break; }
+      case 'F': { branch_target_[lloc] = recent_local[prevbyte]; break; }
+
+      case ';': {
+        then_else.push_back({lloc, lloc});
+        break;
+      }
+
+      case ':': {
+        branch_target_[lloc] = then_else.back().after_else;
+        then_else.back().after_then = lloc;
+        break;
+      }
+
+      case '?': {
+        branch_target_[lloc] = then_else.back().after_then;
+        if (then_else.size() > 1) {
+          then_else.pop_back();
+        }
+        break;
+      }
     }
 
     prevbyte = bytecode;
@@ -399,47 +432,10 @@ void VM::Step() {
     case 'Q': { DropN(Nat(Pop())); break; }
     case 'R': { Rotate(Nat(Pop())); break; }
     case 'S': { auto a = Pop(), b = Pop(); Push(a); Push(b); break; }
-
-    case '?': {
-      if (Pop() < 0) {
-        // Scan forward until we pass ':' or ';'.
-        int deep = 0;
-        while (pc_ < prog_.length()) {
-          const ByteType bc = NextByte();
-          if (bc == '?') {
-            ++deep;
-          } else if (bc == ';') {
-            if (!deep--) {
-              break;
-            }
-          } else if (bc == ':' && !deep) {
-            break;
-          }
-        }
-      }
-      break;
-    }
-
-    case ':': {
-      // Scan forward until we pass ';'.
-      int deep = 0;
-      while (pc_ < prog_.length()) {
-        const ByteType bc = NextByte();
-        if (bc == '?') {
-          ++deep;
-        } else if (bc == ';') {
-          if (!deep--) {
-            break;
-          }
-        }
-      }
-      break;
-    }
-
+    case '?': { if (Pop() < 0) { pc_ = branch_target_[pc_]; } break; }
+    case ':': case 'B': case 'F': { pc_ = branch_target_[pc_]; break; }
     case ';': { break; }
-    case 'L': { NextByte(); break; }
-    case 'B': { pc_ = branch_target_[pc_]; break; }
-    case 'F': { pc_ = branch_target_[pc_]; break; }
+    case 'L': { pc_++; break; }
   }
 }
 

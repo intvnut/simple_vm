@@ -399,17 +399,30 @@ void VM::Prescan() {
   }
 
   // Branch-to-branch pass.
+  std::vector<LocType> branch_froms;
   for (LocType loc = 0; loc != prog_.size();) {
     ByteType bytecode = ByteAt(loc++);
+    LocType branch_from_loc = loc;
     LocType branch_target_loc = branch_target_[loc];
 
-    if (branch_target_loc != kTerminatePc) {
+    branch_froms.clear();
+
+    while (branch_target_loc != kTerminatePc) {
       ByteType target_byte = ByteAt(branch_target_loc);
+
+      branch_froms.push_back(branch_from_loc);
 
       if (target_byte == 'F' || target_byte == 'B' || target_byte == '@' ||
           target_byte == ':' || target_byte == ' ') {
-        branch_target_[loc] = branch_target_[branch_target_loc + 1];
+        branch_from_loc = branch_target_loc + 1;
+        branch_target_loc = branch_target_[branch_from_loc];
+      } else {
+        break;
       }
+    }
+
+    for (auto from : branch_froms) {
+      branch_target_[from] = branch_target_loc;
     }
   }
 }

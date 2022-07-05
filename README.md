@@ -1,7 +1,7 @@
 # Intro
 
 This project contains a simple stack-based, bytecode-oriented virtual machine
-that I initially developed for 
+that I initially developed for
 [this Quora answer.](https://www.quora.com/Interpreted-languages-typically-rely-on-virtual-machines-which-are-hardware-independent-How-does-that-work-seeing-as-all-code-has-to-eventually-be-executed-on-a-physical-device/answer/Joe-Zbiciak).
 
 The file `orig_vm.cc` contains the original VM I developed on the fly in about
@@ -58,42 +58,59 @@ of stack, and the left-hand argument is just beneath it.
 
 ## Bytecode Reference
 
-### Conventions 
+### Conventions
 
 The term TOS refers to the value on the top of stack, and NOS refers to the
 next value on the stack below it ("next on stack").
 
 The notation _v_ after a bytecode refers to a single-character variable `a`
-through `z` that appears in the bytestream after the bytecode.  An invalid _v_
-byte acts as if you supplied `a`.  
+through `z` that appears in the bytestream after the bytecode.  *Old*: An
+invalid _v_ byte acts as if you supplied `a`.  *New*: Any byte may serve as a
+valid variable; however, see caution below.  The bytecodes `a` through `z`
+still serve as shortcuts for those variables specifically.
 
 The notation _n_ before a bytecode refers to a value popped from TOS and
-truncated to an integer.  Negative values map to 0.  The value _n_ does not
-come from the bytecode stream.  That said, if you write a numeric literal
-in the bytecode stream ahead of this bytecode, the VM will push that literal
-onto the stack so it can serve as an argument to the bytecode.  These arguments
-are used with bytecodes that need counts or indices.
+truncated to an integer, and clamped to the range of `int64_t`.  Negative
+values and NaNs map to 0.  The value _n_ does not come from the bytecode
+stream.  That said, if you write a numeric literal in the bytecode stream
+ahead of this bytecode, the VM will push that literal onto the stack so it can
+serve as an argument to the bytecode.  These arguments are used with bytecodes
+that need counts or indices.  (Note: The original VM did not clamp to the
+range of `int64_t`, nor did it check for NaN, so NaNs and out-of-range values
+are undefined behavior.)
 
 The notation _l_ after a bytecode refers to a single-character label.  In the
 original VM, this label is nearly equivalent to _v._  In the case of labels
 formed by the `L` bytecode in the original VM, an invalid value for _v_ does
 nothing, and does not form a label.  In the updated VM, _l_ allows all
-character values to act as labels.  Single-character labels are intended for
-local branches.
+byte values to act as labels; however, see caution below.  Single-character
+labels are intended for local branches.
 
-*New:* The notation _x_ after a bytecode refers to an global label.  Extended
+*New:* The notation _g_ after a bytecode refers to an global label.  Extended
 labels have the same syntax as numeric literals.  As with numeric literals,
-global labels cannot be negative.  The _x_ argument appears after the
+global labels cannot be negative.  The _g_ argument appears after the
 bytecode, as it must not be computed dynamically.
 
-*New:* The notation _d_ refers to a destination popped from TOS.  Infinities
-and NaNs terminate the program.  Negative values are truncated to integers
-and bitwise inverted to determine the new PC.  Non-negative values values
-represent the corresponding global label _x_.  The VM resolves this global
-label to a valid PC value.  Dereferencing a missing global label terminates
-the program.  The last instance of a duplicated global label is the one
-resolved.  Global labels are intended for long-distance jumps and calls.
-Absolute PC values are intended for function pointers and returns.
+*New:* The notation _d_ refers to a destination popped from TOS.  Infinities,
+NaNs, and subnormals terminate the program.  Negative values are truncated to
+integers and bitwise inverted to determine the new PC.  An out-of-range PC
+terminates the program.  Non-negative values values represent the corresponding
+global label _x_.  The VM resolves this global label to a valid PC value.
+Dereferencing a missing global label terminates the program.  The last instance
+of a duplicated global label is the one resolved.  Global labels are intended
+for long-distance jumps and calls.  Absolute PC values are intended for
+function pointers and returns.
+
+*Caution:* For argument types that allow any valid byte value, you should avoid
+using certain byte values.  Specifically, the interpreter may scan for the bytes
+`L`, `?`, `:`, `;`, and `@`, as well as numeric literals, and it may not be able
+to determine whether the preceding bytecode consumes this byte as an argument.
+
+So, while the bytecode might behave as expected when encountered in the byte
+stream, it may cause other bytecodes to behave unexpectedly.  For example,
+consider the construct `D ? 42 L: 17 + : 23 - ;`.  The _then_ clause will
+execute `42 17 +`, while the _else_ clause might execute `17 + 23 -`.  Oops.
+
 
 ### Pseudo-code Functions
 
@@ -101,25 +118,27 @@ The bytecode definitions use the following pseudo-code functions:
 
 | Function | Description |
 | :---: | :--- |
-| `Top()` | Returns the value at the top of stack without popping it |
-| `Pop()` | Pops the item on the top of stack and returns it. |
 | `Push(x)` | Pushes `x` onto the stack. |
+| `Pop()` | Pops the item on the top of stack and returns it. |
+| `Top()` | Returns the value at the top of stack without popping it |
 | `Int(x)` | Truncates `x` to a 2's complement 64-bit integer.  Clamps values to the the representable 64-bit integer range.  NaN maps to 0. |
+| `Uint(x)` | Truncates `x` to an unsigned 64-bit integer.  Clamps values to the the representable 64-bit integer range.  NaN maps to 0. |
 | `Nat(x)` | Like `Int(x)`, only it clamps negative values to 0. |
 | `Pow(x,y)` | Raises `x` to the `y`th power. |
 | `FMod(x,y)` | Returns the floating point remainder after `x/y`, in the same manner as [C and C++.](https://en.cppreference.com/w/cpp/numeric/math/fmod) |
 | `Resolve(x)` | Resolves a destination into a PC address, as per the rules of _d_ above. |
+| `Rotate(x)` | Extracts the element `x` units below TOS and pushes it on top. |
 | `PrintLn(x)` | Prints `x` followed by a newline. |
 | `Print(x)` | Prints `x` without a newline. |
 | `GetV(v)` | Gets the value of variable _v_. |
 | `SetV(v,x)` | Sets the value of variable _v_ to `x`. |
 | `Repeat(n):` | Repeats the following statement `n` times. |
-| `Rotate(x)` | Extracts the element `x` units below TOS and pushes it on top. |
 
 ### Summary
 
 | Bytecode | Description | New? |
 | :--: | :-- | :--: |
+| `a` through `z` | `Push(GetV(v));`  These bytecodes are shortcuts to push the corresponding variables on the stack. The variable _v_ is the bytecode itself. | n |
 | `0`, `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9`, `.` | Numeric digits and `.` form numeric constants. | n |
 | `+` | `TOS = Pop(); NOS = Pop(); Push(NOS + TOS);` | n |
 | `-` | `TOS = Pop(); NOS = Pop(); Push(NOS - TOS);` | n |
@@ -127,21 +146,23 @@ The bytecode definitions use the following pseudo-code functions:
 | `/` | `TOS = Pop(); NOS = Pop(); Push(NOS / TOS);` | n |
 | `~` | `TOS = Pop(); Push(-TOS);`  | n |
 | `%` | `TOS = Pop(); NOS = Pop(); Push(FMod(NOS, TOS));` | YES |
-| `&` | `TOS = Pop(); NOS = Pop(); Push(Int(NOS) & Int(TOS));` | YES |
-| `\|` | `TOS = Pop(); NOS = Pop(); Push(Int(NOS) | Int(TOS));` | YES |
-| `^` | `TOS = Pop(); NOS = Pop(); Push(Int(NOS) ^ Int(TOS));` | YES |
+| `&` | `TOS = Pop(); NOS = Pop(); Push(Uint(NOS) & Uint(TOS));` | YES |
+| `\|` | `TOS = Pop(); NOS = Pop(); Push(Uint(NOS) | Uint(TOS));` | YES |
+| `^` | `TOS = Pop(); NOS = Pop(); Push(Uint(NOS) ^ Uint(TOS));` | YES |
 | `<` | `TOS = Pop(); NOS = Pop(); Push(NOS * Pow(2, TOS));` | YES |
 | `>` | `TOS = Pop(); NOS = Pop(); Push(NOS / Pow(2, TOS));` | YES |
 | `'` | `PrintLn(Top())`. Displays value of TOS on line by itself. | n |
 | `!` _v_ | `PrintLn(GetV(v));` Displays the value of variable _v_ on a line by itself. | n |
-| `@` _x_ | Defines the global label _x._  | YES |
+| `@` _g_ | Defines the global label _g._  | YES |
 | _d_ `C` | *Call.* `TOS = Pop(); Push(~(PC + 1)); PC = Resolve(d);` Makes a function call by jumping to a destination while pushing a return address. | YES |
-| `D` | `Push(Top());` Duplicates TOS. | n |
-| `I` | `TOS = Pop(); Push(Int(TOS));`  Truncates TOS to an integer. | n |
 | _d_ `G` | *Goto.* `TOS = Pop(); PC = Resolve(TOS);`  Sets `PC` to the resolved address of _d_. | YES |
+| `I` | `TOS = Pop(); Push(Int(TOS));`  Truncates and clamps TOS to a signed 2's complement 64-bit integer. | n |
+| `U` | `TOS = Pop(); Push(Uint(TOS));`  Truncates and clamps TOS to an unsigned 64-bit integer. | YES |
 | `M` _v_ | `TOS = Pop(); SetV(v, TOS);`  Pops TOS into variable _v._ | n |
+| `V` _v_ | `Push(GetV(v));` Pushes the variable _v_ onto TOS. | YES |
+| `D` | `Push(Top());` Duplicates TOS. | n |
 | `P` | `Pop();` Pops TOS from the stack. | n |
-| _n_ `Q` | `TOS = Pop(); Repeat(Nat(TOS)): Pop();` Pops the next _n_ values from the stack. | n |
+| _n_ `Q` | `MOS = Pop(); Repeat(Nat(TOS)): Pop();` Pops the next _n_ values from the stack. | n |
 | _n_ `R` | `TOS = Pop(); Rotate(Nat(TOS));` Rotates the top _n_ elements of the stack. | n |
 | `S` | `Rotate(1);` Swaps the top two elements of the stack. | n |
 | `?` | Consumes TOS. If it's negative, it skips ahead to the next `:` (_new:_ or `;`) at the same nesting level and resumes execution after it. | Modified |
@@ -173,7 +194,7 @@ limited set of label names makes that tricky.
 
 ### If-Then-Else
 
-The `?`, `:`, and `;` bytecodes form the an *if-then-else* sequence.  The `?` 
+The `?`, `:`, and `;` bytecodes form the an *if-then-else* sequence.  The `?`
 determines whether to take the *then* or *else* branch based on the sign of
 the value at top of the stack.  Non-negative values take the *then* branch,
 while negative values take the *else* branch.
@@ -198,7 +219,7 @@ A `:` opcode always skips forward to its matching `;`.  That means code such
 as the following has well defined behavior:
 
 ```
-1~ ? La 42'P : 17'P Ba ; 
+1~ ? La 42'P : 17'P Ba ;
 ```
 
 This will print 17 followed by 42, and then terminate.  Branching into the
@@ -235,7 +256,7 @@ non-negative double-precision normal and subnormal values is available for
 labels; however, this specification recommends sticking to the exact integer
 range [1, 2⁵³].
 
-Absolute program addresses are typically created at run time.  When consuming a 
+Absolute program addresses are typically created at run time.  When consuming a
 destination, the VM distinguishes a label reference from a PC address by its
 sign.  Positive values are global labels, while negative values are encoded
 program addresses.  For the latter, the encoded value corresponds to -(PC + 1).
@@ -244,7 +265,7 @@ This specification recommends avoiding 0, so that there's no possibility of
 strange effects around signed zero.  That also leaves the value 0 available to
 signal a null function pointer, for example.
 
-#### 
+#### Global Labels
 
 The `@` bytecode defines an global label.  The global label follows the opcode.
 Never comes from the stack.  The label is fixed in the bytecode.
@@ -278,9 +299,9 @@ given _a,_ _b,_ _c_ and _x._  Assume the arguments are pushed in that order:
 ```
 1 2 3 4 100C ' X
 
-@100 
+@100
 S
-DD* 
+DD*
 5R*S
 4R*+
 2R+S

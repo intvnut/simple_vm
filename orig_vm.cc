@@ -4,10 +4,10 @@
 #include <iostream>
 #include <string>
 #include <vector>
- 
+
 enum NumState {
   kNsIdle, kNsInteger,
-  kNsFraction, kNsExponent 
+  kNsFraction, kNsExponent
 };
 
 int main() {
@@ -30,7 +30,7 @@ int main() {
   double P = 0;
   enum NumState num_state = kNsIdle;
   bool make_num_idle = true;
-  
+
   // Helpers:
   auto top = [&stack]() -> double& {
     if (stack.empty()) {
@@ -169,14 +169,14 @@ int main() {
         auto a = pop();
         top() *= a;
         continue;
-      }         
-      
+      }
+
       case '/': {
         auto a = pop();
         top() /= a;
         continue;
       }
- 
+
       case 'D': {
         push(top());
         continue;
@@ -254,7 +254,7 @@ int main() {
           if (op == '?') {
             ++deep;
           } else if (op == ';') {
-            if (!--deep) {
+            if (!deep--) {
               break;
             }
           }
@@ -288,7 +288,7 @@ int main() {
       }
 
       case 'F': {
-        int v = 'a' + get_v(); 
+        int v = 'a' + get_v();
         // Scan forward until we find L [v].
         while (++pc < prog.size()) {
           if (prog[pc] == v &&

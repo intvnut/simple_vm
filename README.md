@@ -178,6 +178,9 @@ The bytecode definitions use the following pseudo-code functions:
 | `X` | Terminates execution. | n |
 | _whitespace_ | NOP. Also terminates the numeric entry state machine. | n |
 
+Bytecodes not defined in the table above have implementation defined behavior.
+The original VM treats them as NOPs.  The new VM treats them as errors and
+terminates the program.
 
 # Control flow
 

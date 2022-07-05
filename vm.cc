@@ -489,6 +489,12 @@ void VM::Step() {
     case 'L': case '@': case ':': case 'B': case 'F': case ' ': {
       pc_ = branch_target_[pc_]; break;
     }
+
+    default: {
+      std::cout << "Undefined bytecode '" << bytecode << "' at " << pc_ - 1
+                << ". Terminating.\n";
+      terminate_ = true;
+    }
   }
 }
 
@@ -500,6 +506,7 @@ int main() {
   // Read the program on stdin.
   while (std::getline(std::cin, line)) {
     prog += line;
+    prog += ' ';  // Preserve whitespace between lines.
   }
 
   auto vm = VM(prog);

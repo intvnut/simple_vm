@@ -66,11 +66,12 @@ class VM {
   static constexpr ByteType kByteMax = std::numeric_limits<ByteType>::max();
 
   std::string prog_{};
+  std::vector<LocType> branch_target_{};
+
   std::array<ValueType, kByteMax + 1> var_{};
   std::vector<ValueType> stack_{};
   std::map<LocType, ValueLocPair> predec_values_{};
   std::map<double, LocType> global_label_{};
-  std::array<std::vector<LocType>, kByteMax + 1> local_label_{};
   LocType pc_ = 0;
   bool terminate_ = false;
 
@@ -200,23 +201,13 @@ class VM {
     std::cout << val;
   }
 
-  // Parses a number in the bytecode stream at the given location in the
-  // bytecode stream.  Returns the number, and the location of the first
-  // bytecode after it.
   std::pair<ValueType, LocType> GetNumber(LocType loc);
-
-  // Prescans the program, establishing the location of all global and local
-  // labels, and the values of all numbers.  This allows for fast lookup
-  // without scanning at run-time.
-  //
-  // Future possibility: resolve local and conditional branch targets.  Global
-  // branches can't be resolved since they draw their argument from the stack.
-  // Predecoding literals gets us most of that anyway.
   void Prescan();
-
 };
 
 
+// Parses a number in the bytecode stream at the given location in the bytecode
+// stream.  Returns the number, and the location of the first bytecode after it.
 VM::ValueLocPair VM::GetNumber(VM::LocType loc) {
   if (auto it = predec_values_.find(loc); it != predec_values_.end()) {
     return it->second;
@@ -296,20 +287,40 @@ VM::ValueLocPair VM::GetNumber(VM::LocType loc) {
   return val_loc;
 }
 
+// Prescans the program, establishing the location of all global and local
+// labels, and the values of all numbers.  This allows for fast lookup
+// without scanning at run-time.
+//
+// Local reverse branches are resolved in the forward pass.  Local forward
+// branches are resolved in the reverse pass.  Each pass keeps track of the
+// most recent instance of each local label it sees during that pass, making
+// for O(1) lookup.
+//
+// Future possibility: resolve conditional branch targets.  Global branches
+// can't be resolved since they draw their argument from the stack.  Predecoding
+// literals gets us most of that anyway.
+//
+// This should only be called once, from the contructor.
 void VM::Prescan() {
+  // Branch target array is indexed by PC after fetching the bytecode (PC+1).
+  branch_target_.resize(prog_.length() + 1, kTerminatePc);
+
+  // Forward pass.
+  std::array<LocType, kByteMax + 1> recent_local{};
+  std::fill(recent_local.begin(), recent_local.end(), kTerminatePc);
   for (LocType loc = 0; loc != prog_.size();) {
     const ByteType bytecode = ByteAt(loc++);
 
     switch (bytecode) {
-      case 'L': {
-        const ByteType label = ByteAt(loc++);
-        local_label_[label].push_back(loc);
-        break;
-      }
+      case 'L': { recent_local[ByteAt(loc)] = loc + 1; break; }
+      case 'B': { branch_target_[loc] = recent_local[ByteAt(loc)]; break; }
 
       case '@': {
         auto [val, new_loc] = GetNumber(loc);
         global_label_[val] = new_loc;
+        // In the unlikely event someone jumps into the middle of a global label
+        // definition, GetNumber will do the right thing.  For now, optimize
+        // for the more likely case.
         loc = new_loc;
         break;
       }
@@ -321,6 +332,20 @@ void VM::Prescan() {
         break;
       }
     }
+  }
+
+  // Reverse pass.
+  std::fill(recent_local.begin(), recent_local.end(), kTerminatePc);
+  ByteType prevbyte = kTerminateByte;
+  for (LocType loc = prog_.size(); loc > 0;) {
+    const ByteType bytecode = ByteAt(--loc);
+
+    switch (bytecode) {
+      case 'L': { recent_local[prevbyte] = loc + 2; break; }
+      case 'F': { branch_target_[loc + 1] = recent_local[prevbyte]; break; }
+    }
+
+    prevbyte = bytecode;
   }
 }
 
@@ -413,31 +438,8 @@ void VM::Step() {
 
     case ';': { break; }
     case 'L': { NextByte(); break; }
-
-    case 'B': {
-      auto& targets = local_label_[NextByte()];
-      auto from = pc_ - 2;
-      pc_ = kTerminatePc;
-
-      auto it = std::lower_bound(targets.rbegin(), targets.rend(), from,
-                                 std::greater());
-      if (it != targets.rend()) {
-        pc_ = *it;
-      }
-      break;
-    }
-
-    case 'F': {
-      auto& targets = local_label_[NextByte()];
-      auto from = pc_;
-      pc_ = kTerminatePc;
-
-      auto it = std::lower_bound(targets.begin(), targets.end(), from);
-      if (it != targets.end()) {
-        pc_ = *it;
-      }
-      break;
-    }
+    case 'B': { pc_ = branch_target_[pc_]; break; }
+    case 'F': { pc_ = branch_target_[pc_]; break; }
   }
 }
 

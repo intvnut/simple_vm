@@ -233,43 +233,44 @@ VM::ValueLocPair VM::GetNumber(VM::LocType loc) {
         double digit_val = bytecode - '0';
 
         switch (num_state) {
-          case kNsIdle:
+          case kNsIdle: {
             val = digit_val;
             num_state = kNsInteger;
             continue;
-
-          case kNsInteger:
+          }
+          case kNsInteger: {
             val = val * 10. + digit_val;
             continue;
-
-          case kNsFraction:
+          }
+          case kNsFraction: {
             val += digit_val / p;
             p *= 10.;
             continue;
-
-          case kNsExponent:
+          }
+          case kNsExponent: {
             p = p * 10. + digit_val;
             continue;
+          }
         }
       }
 
       case '.': {
         switch (num_state) {
-          case kNsIdle:
-          case kNsInteger:
+          case kNsIdle: case kNsInteger: {
             num_state = kNsFraction;
             p = 10.;
             continue;
-
-          case kNsFraction:
+          }
+          case kNsFraction: {
             num_state = kNsExponent;
             p = 0.;
             continue;
-
-          case kNsExponent:
+          }
+          case kNsExponent: {
             val *= std::pow(10, int(p));
             done = true;
             continue;
+          }
         }
       }
 

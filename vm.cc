@@ -32,7 +32,7 @@ class VM {
   }
 
   // Single-steps the program.
-  void Step();
+  bool Step();
 
   // Gets a variable, given its bytecode.
   ValueType GetV(ByteType var) const {
@@ -59,6 +59,21 @@ class VM {
     return stack_;
   }
 
+  // Gets the total number of steps executed.  This is the actual step count,
+  // and reflects any optimizations the prescanner performed, for example.
+  int64_t GetSteps() const {
+    return steps_;
+  }
+
+  // Gets the bytecode at a given PC.  Returns `X` (the termination bytecode)
+  // if PC is out of range.
+  ByteType ByteAt(LocType loc) const {
+    if (loc < 0 || loc >= prog_.size()) {
+      return kTerminateByte;
+    }
+    return prog_[loc];
+  }
+
  private:
   using ValueLocPair = std::pair<ValueType, LocType>;
 
@@ -74,6 +89,7 @@ class VM {
   std::map<LocType, ValueLocPair> predec_values_{};
   std::map<double, LocType> global_label_{};
   LocType pc_ = 0;
+  int64_t steps_ = 0;
   bool terminate_ = false;
 
   // Gets the next bytecode, advancing the PC.  Returns `X` (the termination
@@ -83,15 +99,6 @@ class VM {
       return kTerminateByte;
     }
     return prog_[pc_++];
-  }
-
-  // Gets the bytecode at a given PC.  Returns `X` (the termination bytecode)
-  // if PC is out of range.
-  ByteType ByteAt(LocType loc) const {
-    if (loc < 0 || loc >= prog_.size()) {
-      return kTerminateByte;
-    }
-    return prog_[loc];
   }
 
   // Pushes an item onto the stack_.
@@ -461,10 +468,12 @@ void VM::Prescan() {
   }
 }
 
-void VM::Step() {
+bool VM::Step() {
   int bytecode = FixWs(NextByte());
   // Floating point escape bytecodes.
   auto Esc = [](ByteType b) { return b + kByteMax + 1; };
+
+  steps_++;
 
   if (bytecode == '\\') {
     bytecode = Esc(NextByte());
@@ -588,11 +597,25 @@ void VM::Step() {
       terminate_ = true;
     }
   }
+
+  return terminate_;
+}
+
+static void ShowTop5(const std::vector<VM::ValueType>& stack) {
+  std::size_t first = 0;
+  std::size_t last = stack.size();
+  if (last - first > 5) {
+    first = last - 5;
+  }
+
+  for (std::size_t i = first; i < last; ++i) {
+    std::cout << ' ' << stack[i];
+  }
 }
 
 }  // namespace
 
-int main() {
+int main(int argc, char *argv[]) {
   std::string prog, line;
 
   // Read the program on stdin.
@@ -603,7 +626,18 @@ int main() {
 
   auto vm = VM(prog);
 
-  vm.Run();
+  if (argc == 1) {
+    vm.Run();
+  } else {
+    bool terminate;
+    do {
+      VM::LocType pc = vm.GetPc();
+      std::cout << "PC=" << pc << " '" << vm.ByteAt(pc) << "' ";
+      ShowTop5(vm.GetStack());
+      std::cout << '\n';
+      terminate = vm.Step();
+    } while (!terminate);
+  }
 
-  std::cout << "DONE\n";
+  std::cout << "DONE.  " << vm.GetSteps() << " steps\n";
 }

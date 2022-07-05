@@ -320,7 +320,13 @@ void VM::Prescan() {
   std::array<LocType, kByteMax + 1> recent_local{};
   std::fill(recent_local.begin(), recent_local.end(), kTerminatePc);
   for (LocType loc = 0; loc != prog_.size();) {
-    const ByteType bytecode = ByteAt(loc++);
+    ByteType bytecode = ByteAt(loc++);
+
+    // Force all whitespace to be exactly ' '. 
+    if (std::isspace(bytecode)) {
+      prog_[loc - 1] = ' ';
+      bytecode = ' ';
+    }
 
     switch (bytecode) {
       case 'L': { recent_local[ByteAt(loc)] = loc + 1; break; }
@@ -349,9 +355,14 @@ void VM::Prescan() {
   // Reverse pass.
   std::fill(recent_local.begin(), recent_local.end(), kTerminatePc);
   ByteType prevbyte = kTerminateByte;
+  LocType last_non_whitespace = kTerminatePc;
   for (LocType loc = prog_.size(); loc > 0;) {
     const LocType lloc = loc;
     const ByteType bytecode = ByteAt(--loc);
+
+    if (bytecode != ' ') {
+      last_non_whitespace = loc;
+    }
 
     switch (bytecode) {
       case 'L': { recent_local[prevbyte] = loc + 2; break; }
@@ -373,6 +384,11 @@ void VM::Prescan() {
         if (then_else.size() > 1) {
           then_else.pop_back();
         }
+        break;
+      }
+
+      case ' ': {
+        branch_target_[lloc] = last_non_whitespace;
         break;
       }
     }
@@ -433,7 +449,7 @@ void VM::Step() {
     case '?': { if (Pop() < 0) { pc_ = branch_target_[pc_]; } break; }
     case ';': { break; }
     case 'L': { pc_++; break; }
-    case '@': case ':': case 'B': case 'F': {
+    case '@': case ':': case 'B': case 'F': case ' ': {
       pc_ = branch_target_[pc_]; break;
     }
   }

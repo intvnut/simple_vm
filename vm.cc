@@ -307,7 +307,8 @@ VM::ValueLocPair VM::GetNumber(VM::LocType loc) {
             continue;
           }
           case kNsExponent: {
-            val *= std::pow(10., int(p));
+            // Terminating an exponent w/ '.' gives a negative exponent.
+            val /= std::pow(10., int(p));
             done = true;
             continue;
           }
@@ -315,6 +316,11 @@ VM::ValueLocPair VM::GetNumber(VM::LocType loc) {
       }
 
       default: {
+        // Terminating an exponent w/ something other than '.' gives
+        // a positive exponent.
+        if (num_state == kNsExponent) {
+          val *= std::pow(10., int(p));
+        }
         loc--;  // Back up, as we just passed a non-numeric bytecode.
         done = true;
       }

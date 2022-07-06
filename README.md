@@ -235,8 +235,59 @@ the original VM.
 | `-` | `Push(signbit(Pop()));`  Pushes 1 if the number is negative, 0 otherwise. |
 | `+` | `TOS = Pop(); NOS = Pop(); Push(copysign(NOS, TOS));` Copies the sign of TOS onto NOS.  |
 
+# Numeric Literals
 
-# Control flow
+## State Machine
+
+Numeric literals are defined by a sequence of bytecodes that conceptually drive
+a state machine to update the top of stack.  This state machine has four states:
+
+| State | Description |
+| :---: | :--- |
+| Idle  | Default state when executing code. |
+| Integer | Obtains the integer portion of a floating point number. |
+| Fraction | Obtains the fractional portion of a floating point number. |
+| Exponent | Obtains the exponent of a floating point number. |
+
+The state machine has an internal variable P which is used to track powers of 
+ten.  The name `digit_value` represents the numeric value associated with the
+bytecodes `0` through `9`.  For example `digit_value` for `0` is 0.
+
+The state machine has the following transitions, driven by the bytecodes in
+the byte stream.  
+
+| Current State | Bytecode | New State | Action |
+| :---: | :---:    | :---:     | :--- |
+| Idle  | `0` through `9` | Integer | `Push(digit_value);` |
+| Idle  | `.` | Fraction | `P = 10.0; Push(digit_value / P);` |
+| Idle  | others | Idle | - |
+| Integer | `0` through `9` | Integer | `Push(Pop() * 10 + digit_value;` |
+| Integer | `.` | Fraction | `P = 10.0; Push(Pop() + digit_value / P);` |
+| Integer | others | Idle | - | 
+| Fraction | `0` through `9` | Fraction | `P = P * 10.0; Push(Pop() + digit_value / P);` |
+| Fraction | `.` | Exponent | `P = 0;` |
+| Fraction | others | Idle | - |
+| Exponent | `0` through `9` | Exponent | `P = P * 10.0; P += digit_val;` |
+| Exponent | `.` | Idle | `Push(Pop() / pow(10.0, P);`  Applies a negative exponent. |
+| Exponent | others | Idle | `Push(Pop() * pow(10.0, P);`  Applies a positive exponent. |
+
+*Note:*  This is a slight change from the original VM, which did not offer
+negative exponents.  In the original VM, you must terminate an exponent with
+`.`, otherwise it won't be applied.  In the new VM, terminating an exponent
+with `.` yields a negative exponent, while terminating it with any other
+bytecode yields a positive exponent.  This encoding favors positive exponents
+slightly.
+
+## Examples.
+
+| Bytecode | Value  |
+| :---     | ---:   | 
+| `100`    | 100.00 |
+| `123.45` | 123.45 |
+| `1..2 `  | 100.00 |
+| `1..2.`  |   0.01 |
+
+# Control Flow
 
 ## Unconditional local branches
 

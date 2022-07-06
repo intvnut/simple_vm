@@ -644,11 +644,11 @@ bool VM::Step() {
   return terminate_;
 }
 
-static void ShowTop5(const std::vector<VM::ValueType>& stack) {
+static void ShowTopN(const std::vector<VM::ValueType>& stack, int n) {
   std::size_t first = 0;
   std::size_t last = stack.size();
-  if (last - first > 5) {
-    first = last - 5;
+  if (last - first > n) {
+    first = last - n;
   }
 
   for (std::size_t i = first; i < last; ++i) {
@@ -678,7 +678,7 @@ int main(int argc, char *argv[]) {
     do {
       VM::LocType pc = vm.GetPc();
       std::cout << "PC=" << pc << " '" << vm.ByteAt(pc) << "' ";
-      ShowTop5(vm.GetStack());
+      ShowTopN(vm.GetStack(), 10);
       std::cout << '\n';
       terminate = vm.Step();
     } while (!terminate);

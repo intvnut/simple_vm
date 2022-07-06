@@ -399,7 +399,7 @@ void VM::Prescan() {
     const ByteType currbyte = ByteAt(--loc);
     const ByteType bytecode = FixWs(currbyte);
 
-    if (bytecode != ' ') {
+    if (bytecode != ' ' && bytecode != ';') {
       lnw2 = lnw1;
       lnw1 = last_non_whitespace;
       last_non_whitespace = loc;
@@ -414,13 +414,14 @@ void VM::Prescan() {
       case 'F': { branch_target_[lloc] = recent_local[prevbyte]; break; }
 
       case ';': {
-        then_else.push_back({lloc, lloc});
+        branch_target_[lloc] = last_non_whitespace;
+        then_else.push_back({last_non_whitespace, last_non_whitespace});
         break;
       }
 
       case ':': {
         branch_target_[lloc] = then_else.back().after_else;
-        then_else.back().after_then = lloc;
+        then_else.back().after_then = lnw1;
         break;
       }
 
@@ -454,14 +455,17 @@ void VM::Prescan() {
       ByteType target_byte = FixWs(ByteAt(branch_target_loc));
 
       if (target_byte == 'L' || target_byte == 'F' || target_byte == 'B' ||
-          target_byte == '@' || target_byte == ':' || target_byte == ' ') {
+          target_byte == '@' || target_byte == ':' || target_byte == ' ' ||
+          target_byte == 'X' || target_byte == ';') {
         if (g_debug_branch_opt) {
           std::cout << "loc=" << loc << " tb='" << target_byte << "' bfl="
                     << branch_from_loc << " btl=" << branch_target_loc;
         }
         branch_froms.push_back(branch_from_loc);
         branch_from_loc = branch_target_loc + 1;
-        branch_target_loc = branch_target_[branch_from_loc];
+        // Force it for `X` as it might be outside the program image.
+        branch_target_loc =
+            target_byte == 'X' ? kTerminatePc : branch_target_[branch_from_loc];
         if (g_debug_branch_opt) {
           std::cout << " => bfl=" << branch_from_loc
                     << " btl=" << branch_target_loc << '\n';
@@ -489,7 +493,8 @@ void VM::Prescan() {
   for (auto& [label, target] : global_label_) {
     ByteType target_byte = FixWs(ByteAt(target));
     if (target_byte == 'L' || target_byte == 'F' || target_byte == 'B' ||
-        target_byte == '@' || target_byte == ':' || target_byte == ' ') {
+        target_byte == '@' || target_byte == ':' || target_byte == ' ' ||
+        target_byte == 'X' || target_byte == ';') {
       if (g_debug_branch_opt) {
         std::cout << "remap lbl=" << label << " old=" << target << " new="
                   << branch_target_[target + 1] << '\n';
@@ -557,8 +562,7 @@ bool VM::Step() {
     case 'R': { Rotate(Nat(Pop())); break; }
     case 'S': { auto a = Pop(), b = Pop(); Push(a); Push(b); break; }
     case '?': { if (Pop() < 0) { pc_ = branch_target_[pc_]; } break; }
-    case ';': { break; }
-    case 'L': case '@': case ':': case 'B': case 'F': case ' ': {
+    case 'L': case '@': case ':': case 'B': case 'F': case ' ': case ';': {
       pc_ = branch_target_[pc_]; break;
     }
 

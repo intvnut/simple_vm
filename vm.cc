@@ -15,6 +15,8 @@ namespace {
 
 using std::int64_t;
 
+bool g_debug_branch_opt = false;
+
 class VM {
  public:
   using LocType = int64_t;
@@ -86,7 +88,7 @@ class VM {
 
   std::array<ValueType, kByteMax + 1> var_{};
   std::vector<ValueType> stack_{};
-  std::map<LocType, ValueLocPair> predec_values_{};
+  std::map<LocType, ValueType> predec_values_{};
   std::map<double, LocType> global_label_{};
   LocType pc_ = 0;
   int64_t steps_ = 0;
@@ -246,7 +248,7 @@ class VM {
 // stream.  Returns the number, and the location of the first bytecode after it.
 VM::ValueLocPair VM::GetNumber(VM::LocType loc) {
   if (auto it = predec_values_.find(loc); it != predec_values_.end()) {
-    return it->second;
+    return { it->second, branch_target_[loc + 1] };
   }
 
   enum NumState {
@@ -317,9 +319,9 @@ VM::ValueLocPair VM::GetNumber(VM::LocType loc) {
     }
   }
 
-  const auto val_loc = ValueLocPair{ val, loc };
-  predec_values_[orig_loc] = val_loc;
-  return val_loc;
+  predec_values_[orig_loc] = val;
+  branch_target_[orig_loc + 1] = loc;
+  return { val, loc };
 }
 
 
@@ -451,19 +453,48 @@ void VM::Prescan() {
     while (branch_target_loc != kTerminatePc) {
       ByteType target_byte = FixWs(ByteAt(branch_target_loc));
 
-      branch_froms.push_back(branch_from_loc);
-
       if (target_byte == 'L' || target_byte == 'F' || target_byte == 'B' ||
           target_byte == '@' || target_byte == ':' || target_byte == ' ') {
+        if (g_debug_branch_opt) {
+          std::cout << "loc=" << loc << " tb='" << target_byte << "' bfl="
+                    << branch_from_loc << " btl=" << branch_target_loc;
+        }
+        branch_froms.push_back(branch_from_loc);
         branch_from_loc = branch_target_loc + 1;
         branch_target_loc = branch_target_[branch_from_loc];
+        if (g_debug_branch_opt) {
+          std::cout << " => bfl=" << branch_from_loc
+                    << " btl=" << branch_target_loc << '\n';
+        }
       } else {
         break;
       }
     }
 
-    for (auto from : branch_froms) {
-      branch_target_[from] = branch_target_loc;
+    if (branch_target_[loc] != branch_target_loc) {
+      for (auto from : branch_froms) {
+        if (g_debug_branch_opt) {
+          std::cout << "remap pc=" << from << " old=" << branch_target_[from]
+                    << " new=" <<  branch_target_loc << '\n';
+        }
+        branch_target_[from] = branch_target_loc;
+      }
+    }
+  }
+
+  // Branch-to-global-label pass.  If a global label points to an unconditional
+  // branch, we can redirect the global label to its ultimate target as well.
+  // At this point we don't need to step through the chain of targets as that's
+  // just been flattened.
+  for (auto& [label, target] : global_label_) {
+    ByteType target_byte = FixWs(ByteAt(target));
+    if (target_byte == 'L' || target_byte == 'F' || target_byte == 'B' ||
+        target_byte == '@' || target_byte == ':' || target_byte == ' ') {
+      if (g_debug_branch_opt) {
+        std::cout << "remap lbl=" << label << " old=" << target << " new="
+                  << branch_target_[target + 1] << '\n';
+      }
+      target = branch_target_[target + 1];
     }
   }
 }
@@ -623,6 +654,8 @@ int main(int argc, char *argv[]) {
     prog += line;
     prog += ' ';  // Preserve whitespace between lines.
   }
+
+  g_debug_branch_opt = argc > 1 && argv[1][0] == 'b';
 
   auto vm = VM(prog);
 

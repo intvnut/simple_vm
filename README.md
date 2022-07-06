@@ -63,7 +63,7 @@ of stack, and the left-hand argument is just beneath it.
 # VM Bytecode Reference
 
 With exception to the floating point math library, bytecodes are a single byte
-long.  The floating point math library is large enough that it uses a `\\`
+long.  The floating point math library is large enough that it uses a `\`
 prefix byte followed by a second byte to specify the library entry.
 
 Currently, all of the bytecodes consist of printable characters and whitespace.
@@ -167,7 +167,7 @@ terminates the program.
 | `^` | `TOS = Pop(); NOS = Pop(); Push(Uint(NOS) ^ Uint(TOS));` | YES |
 | `<` | `TOS = Pop(); NOS = Pop(); Push(NOS * Pow(2, TOS));` | YES |
 | `>` | `TOS = Pop(); NOS = Pop(); Push(NOS / Pow(2, TOS));` | YES |
-| `\\` | Math library escape. See table below. | YES |
+| `\` | Math library escape. See table below. | YES |
 | `'` | `PrintLn(Top())`. Displays value of TOS on line by itself. | n |
 | `!` _v_ | `PrintLn(GetV(v));` Displays the value of variable _v_ on a line by itself. | n |
 | `@` _g_ | Defines the global label _g._  | YES |
@@ -193,7 +193,7 @@ terminates the program.
 
 ### Library Escape Bytecodes
 
-These are preceded by the `\\` escape prefix bytecode.  None of these is in
+These are preceded by the `\` escape prefix bytecode.  None of these is in
 the original VM.
 
 | Bytecode | Description |
@@ -438,4 +438,52 @@ then swaps the sum under the return address.  The stack now contains 27, _d_.
 
 The final `G` then returns.
 
+This is a trace from the VM, using the command line flag `-` to turn on trace
+mode:
 
+```
+PC=0 '1'
+PC=2 '2'  1
+PC=4 '3'  1 2
+PC=6 '4'  1 2 3
+PC=8 '1'  1 2 3 4
+PC=11 'C'  1 2 3 4 100
+PC=23 'S'  1 2 3 4 -13
+PC=24 ' '  1 2 3 -13 4
+PC=25 'D'  1 2 3 -13 4
+PC=26 'D'  1 2 3 -13 4 4
+PC=27 '*'  1 2 3 -13 4 4 4
+PC=28 ' '  1 2 3 -13 4 16
+PC=29 '5'  1 2 3 -13 4 16
+PC=30 'R'  1 2 3 -13 4 16 5
+PC=31 '*'  2 3 -13 4 16 1
+PC=32 'S'  2 3 -13 4 16
+PC=33 ' '  2 3 -13 16 4
+PC=34 '4'  2 3 -13 16 4
+PC=35 'R'  2 3 -13 16 4 4
+PC=36 '*'  3 -13 16 4 2
+PC=37 '+'  3 -13 16 8
+PC=38 ' '  3 -13 24
+PC=39 '2'  3 -13 24
+PC=40 'R'  3 -13 24 2
+PC=41 '+'  -13 24 3
+PC=42 'S'  -13 27
+PC=43 ' '  27 -13
+PC=44 'G'  27 -13
+PC=12 ' '  27
+PC=13 '''  27
+27
+PC=14 ' '  27
+PC=9223372036854775807 'X'  27
+DONE.  32 steps
+```
+The trace above shows the PC, the bytecode that's about to execute, and the top
+10 elements on the stack.  The very large PC value at the end is a deliberately
+out-of-range PC address used to force the interpreter to halt.  I used
+`INT64_MAX_T`.  Any fetch outside the program's main text returns `X`.
+
+*Note:* Some of the steps implied by the bytecode don't appear in the trace.
+The updated VM prescans the input to resolve numeric literals, labels, and many
+branch targets.  Literals only take one step of running time as a result, and
+they will skip directly to the next non-branch, non-whitespace bytecode that
+follows them in execution order.

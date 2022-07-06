@@ -89,10 +89,10 @@ that need counts or indices.  (Note: The original VM did not clamp to the
 range of `int64_t`, nor did it check for NaN, so NaNs and out-of-range values
 are undefined behavior.)
 
-The notation _l_ after a bytecode refers to a single-character label.  In the
+The notation _ℓ_ after a bytecode refers to a single-character label.  In the
 original VM, this label is nearly equivalent to _v._  In the case of labels
 formed by the `L` bytecode in the original VM, an invalid value for _v_ does
-nothing, and does not form a label.  In the updated VM, _l_ allows all
+nothing, and does not form a label.  In the updated VM, _ℓ_ allows all
 byte values to act as labels; however, see caution below.  Single-character
 labels are intended for local branches.
 
@@ -154,7 +154,7 @@ terminates the program.
 
 | Bytecode | Description | New? |
 | :--: | :-- | :--: |
-| `a` through `z` | `Push(GetV(v));`  These bytecodes are shortcuts to push the corresponding variables on the stack. The variable _v_ is the bytecode itself. | n |
+| `a` .. `z` | `Push(GetV(v));`  These bytecodes are shortcuts to push the corresponding variables on the stack. The variable _v_ is the bytecode itself. | n |
 | `0`, `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9`, `.` | Numeric digits and `.` form numeric constants. | n |
 | `+` | `TOS = Pop(); NOS = Pop(); Push(NOS + TOS);` | n |
 | `-` | `TOS = Pop(); NOS = Pop(); Push(NOS - TOS);` | n |
@@ -185,9 +185,9 @@ terminates the program.
 | `?` | Consumes TOS. If it's negative, it skips ahead to the next `:` (_new:_ or `;`) at the same nesting level and resumes execution after it. | Modified |
 | `:` | Skips ahead to the next `;` at the same nesting level and resumes execution after it. | n |
 | `;` | NOP.  Serves as marker for `:`. | n |
-| `L` _l_ | NOP.  Serves as marker for label _l._  | Modified |
-| `B` _l_ | Jumps backward to previous `L` _l_.  Restarts (old) or terminates (new) program if label not found. | Modified |
-| `F` _l_ | Jumps forward to next `L` _l_.  Terminates program if label not found. | Modified |
+| `L` _ℓ_ | NOP.  Serves as marker for label _l._  | Modified |
+| `B` _ℓ_ | Jumps backward to previous `L` _ℓ_.  Restarts (old) or terminates (new) program if label not found. | Modified |
+| `F` _ℓ_ | Jumps forward to next `L` _ℓ_.  Terminates program if label not found. | Modified |
 | `X` | Terminates execution. | n |
 | _whitespace_ | NOP. Also terminates the numeric entry state machine. | n |
 
@@ -258,16 +258,16 @@ the byte stream.
 
 | Current State | Bytecode | New State | Action |
 | :---: | :---:    | :---:     | :--- |
-| Idle  | `0` through `9` | Integer | `Push(digit_value);` |
+| Idle  | `0` .. `9` | Integer | `Push(digit_value);` |
 | Idle  | `.` | Fraction | `P = 10.0; Push(digit_value / P);` |
 | Idle  | others | Idle | - |
-| Integer | `0` through `9` | Integer | `Push(Pop() * 10 + digit_value;` |
+| Integer | `0` .. `9` | Integer | `Push(Pop() * 10 + digit_value;` |
 | Integer | `.` | Fraction | `P = 10.0; Push(Pop() + digit_value / P);` |
 | Integer | others | Idle | - | 
-| Fraction | `0` through `9` | Fraction | `P = P * 10.0; Push(Pop() + digit_value / P);` |
+| Fraction | `0` .. `9` | Fraction | `P = P * 10.0; Push(Pop() + digit_value / P);` |
 | Fraction | `.` | Exponent | `P = 0;` |
 | Fraction | others | Idle | - |
-| Exponent | `0` through `9` | Exponent | `P = P * 10.0; P += digit_val;` |
+| Exponent | `0` .. `9` | Exponent | `P = P * 10.0; P += digit_val;` |
 | Exponent | `.` | Idle | `Push(Pop() / pow(10.0, P);`  Applies a negative exponent. |
 | Exponent | others | Idle | `Push(Pop() * pow(10.0, P);`  Applies a positive exponent. |
 

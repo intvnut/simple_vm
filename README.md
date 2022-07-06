@@ -96,7 +96,7 @@ nothing, and does not form a label.  In the updated VM, _l_ allows all
 byte values to act as labels; however, see caution below.  Single-character
 labels are intended for local branches.
 
-*New:* The notation _g_ after a bytecode refers to an global label.  Extended
+*New:* The notation _g_ after a bytecode refers to an global label.  Global
 labels have the same syntax as numeric literals.  As with numeric literals,
 global labels cannot be negative.  The _g_ argument appears after the
 bytecode, as it must not be computed dynamically.

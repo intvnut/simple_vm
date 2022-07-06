@@ -554,8 +554,8 @@ bool VM::Step() {
     case '&': { TwoOpUint(std::bit_and()); break; }
     case '|': { TwoOpUint(std::bit_or()); break; }
     case '^': { TwoOpUint(std::bit_xor()); break; }
-    case '<': { auto rhs = Pop(); Top() *= std::exp2(rhs); break; }
-    case '>': { auto rhs = Pop(); Top() /= std::exp2(rhs); break; }
+    case '<': { OneOp<DblFxn1>(std::exp2); TwoOp(std::multiplies()); break; }
+    case '>': { OneOp<DblFxn1>(std::exp2); TwoOp(std::divides()); break; }
     case '\'': { PrintLn(Top()); break; }
     case '!': { PrintLn(GetV(NextByte())); break; }
     case 'C': { auto dst = Resolve(Pop()); Push(~pc_); pc_ = dst; break; }
@@ -616,11 +616,7 @@ bool VM::Step() {
       Push(exp);
       break;
     }
-    case Esc('F'): {
-      auto rhs = Pop();
-      Top() = std::ldexp(Top(), rhs);
-      break;
-    }
+    case Esc('F'): { TwoOp<double(double,int)>(std::ldexp); break; }
     case Esc('m'): {
       double int_part;
       Top() = std::modf(Top(), &int_part);
@@ -628,11 +624,7 @@ bool VM::Step() {
       break;
     }
     case Esc('-'): { OneOp<bool(double)>(std::signbit); break; }
-    case Esc('+'): {
-      auto rhs = Pop();
-      Top() = std::copysign(Top(), rhs);
-      break;
-    }
+    case Esc('+'): { TwoOp<DblFxn2>(std::copysign); break; }
 
     default: {
       std::cout << "Undefined bytecode '" << bytecode << "' at " << pc_ - 1

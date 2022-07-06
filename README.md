@@ -2,7 +2,7 @@
 
 This project contains a simple stack-based, bytecode-oriented virtual machine
 that I initially developed for
-[this Quora answer.](https://www.quora.com/Interpreted-languages-typically-rely-on-virtual-machines-which-are-hardware-independent-How-does-that-work-seeing-as-all-code-has-to-eventually-be-executed-on-a-physical-device/answer/Joe-Zbiciak).
+[this Quora answer.](https://www.quora.com/Interpreted-languages-typically-rely-on-virtual-machines-which-are-hardware-independent-How-does-that-work-seeing-as-all-code-has-to-eventually-be-executed-on-a-physical-device/answer/Joe-Zbiciak)
 
 The file `orig_vm.cc` contains the original VM I developed on the fly in about
 2 - 3 hours of furious typing in Quora's editor, plus subsequent bug fixes.
@@ -237,6 +237,9 @@ the original VM.
 
 # Numeric Literals
 
+Numeric literals are expressed in decimal and are always positive.  You can make
+a negative value by adding `~` as a suffix to negate the value.
+
 ## State Machine
 
 Numeric literals are defined by a sequence of bytecodes that conceptually drive
@@ -278,7 +281,7 @@ with `.` yields a negative exponent, while terminating it with any other
 bytecode yields a positive exponent.  This encoding favors positive exponents
 slightly.
 
-## Examples.
+## Examples
 
 | Bytecode | Value  |
 | :---     | ---:   | 
@@ -286,6 +289,8 @@ slightly.
 | `123.45` | 123.45 |
 | `1..2 `  | 100.00 |
 | `1..2.`  |   0.01 |
+| `.12`    |   0.12 |
+| `.12.3`  | 120.00 |
 
 # Control Flow
 

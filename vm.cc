@@ -193,7 +193,38 @@ class VM {
   // element at the top.  0 leaves the stack unmodified, while 1 swaps the
   // top two elements.
   void Rotate(int64_t n) {
-    if (n >= stack_.size()) {
+    // C++'s integer promotion rules cause problems for signed vs. unsigned
+    // comparisons.  So, pull out the negative cases for `n` first.
+
+    if (n < 0) {
+      const auto old_tos = Pop();  // This handles the empty stack case too.
+      const auto pn = uint64_t(-n);
+
+      // We must reify virtual stack elements if -n > size().  To avoid O(n^2)
+      // behavior for certain pathological programs, we'll grow the stack to
+      // whatever power of 2 is greater or equal to -n.
+      if (pn > stack_.size()) {
+        // Old-school trick to find a power of 2 greater than to another
+        // integer.
+        auto x = pn;
+        x = x | (x >> 1);
+        x = x | (x >> 2);
+        x = x | (x >> 4);
+        x = x | (x >> 6);
+        x = x | (x >> 16);
+        x = x | (x >> 32);
+        x += 1;
+        stack_.insert(stack_.begin(), x, 0.);
+
+        // Since the above guarantees the new stack is at least 1 larger
+        // than necessary, we can simply overwrite the reified 0.
+        const auto it = stack_.end() - pn - 1;
+        *it = old_tos;
+      } else {
+        // Just insert the item, and pay for the O(n) copy.
+        stack_.insert(stack_.end() + n, 1, old_tos);
+      }
+    } else if (n >= int64_t(stack_.size())) {
       Push(0.);
     } else if (n > 0) {
       std::size_t idx = stack_.size() - n - 1;
@@ -567,7 +598,7 @@ bool VM::Step() {
     case 'D': { Push(Top()); break; }
     case 'P': { Pop(); break; }
     case 'Q': { DropN(Nat(Pop())); break; }
-    case 'R': { Rotate(Nat(Pop())); break; }
+    case 'R': { Rotate(Int(Pop())); break; }
     case 'S': { auto a = Pop(), b = Pop(); Push(a); Push(b); break; }
     case '?': { if (Pop() < 0) { pc_ = branch_target_[pc_]; } break; }
     case 'L': case '@': case ':': case 'B': case 'F': case ' ': case ';': {

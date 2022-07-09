@@ -137,12 +137,65 @@ The bytecode definitions use the following pseudo-code functions:
 | `Pow(x,y)` | Raises `x` to the `y`th power. |
 | `FMod(x,y)` | Returns the floating point remainder after `x/y`, in the same manner as [C and C++.](https://en.cppreference.com/w/cpp/numeric/math/fmod) |
 | `Resolve(x)` | Resolves a destination into a PC address, as per the rules of _d_ above. |
-| `Rotate(x)` | Extracts the element `x` units below TOS and pushes it on top. |
+| `Rotate(x)` | Rotates the top `abs(x)` elements of the stack.  See description below. |
 | `PrintLn(x)` | Prints `x` followed by a newline. |
 | `Print(x)` | Prints `x` without a newline. |
 | `GetV(v)` | Gets the value of variable _v_. |
 | `SetV(v,x)` | Sets the value of variable _v_ to `x`. |
 | `Repeat(n):` | Repeats the following statement `n` times. |
+
+
+### Stack Rotation with `Rotate`
+
+Consider the following stack:
+
+```
+     0  <-- TOS
+     1
+     2
+     3
+     4
+```
+
+An _upward_ rotation extracts a value down in the stack, extracts it, and then
+places it on the top of the stack.  The `Rotate(x)` primitive performs this
+rotation when `x` is positive, rotating the `x`th element below TOS to the top.
+`Rotate(2)` transforms the stack above to this:
+
+```
+     2  <-- New TOS
+     0  <-- Old TOS
+     1
+     3
+     4
+```
+
+A _downward_ rotation is the exact inverse.  It pops the current TOS, and then
+inserts it down into the stack.  The `Rotate(x)` primitive performs this 
+rotation when `x` is negative, inserting the just-popped value just above
+the `abs(x)`th position below the new TOS.  `Rotate(-2)` transforms the 
+original stack above to this:
+
+```
+     1  <-- New TOS
+     2
+     0  <-- Old TOS
+     3
+     4
+``` 
+
+Hopefully it's clear these Clearly these two definitions are inverses of each
+other.  This definition conveniently makes `Rotate(+0)` and `Rotate(-0)` mean
+the same thing: _do nothing._
+
+*Notes:*
+
+* The original VM only supported _upward_ rotation.
+* Rotation is _O(n)._
+* The terms _upward_ and _downward_ may or may not be standard.  I thought they
+  described things well in this context, relative to what happens with TOS.
+* The convention for non-negative values matches the convention for FORTH's
+  `ROLL.`  
 
 ## Bytecode Definitions
 
@@ -180,7 +233,7 @@ terminates the program.
 | `D` | `Push(Top());` Duplicates TOS. | n |
 | `P` | `Pop();` Pops TOS from the stack. | n |
 | _n_ `Q` | `MOS = Pop(); Repeat(Nat(TOS)): Pop();` Pops the next _n_ values from the stack. | n |
-| _n_ `R` | `TOS = Pop(); Rotate(Nat(TOS));` Rotates the top _n_ elements of the stack. | n |
+| _n_ `R` | `TOS = Pop(); Rotate(Int(TOS));` Rotates the top _n_ elements of the stack. | Modified |
 | `S` | `Rotate(1);` Swaps the top two elements of the stack. | n |
 | `?` | Consumes TOS. If it's negative, it skips ahead to the next `:` (_new:_ or `;`) at the same nesting level and resumes execution after it. | Modified |
 | `:` | Skips ahead to the next `;` at the same nesting level and resumes execution after it. | n |
